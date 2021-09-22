@@ -1,0 +1,8 @@
+name: panmers
+channels:
+   - conda-forge
+   - bioconda
+   - defaults
+dependencies:
+   - snakemake-minimal=6.6.1
+   - pandas=1.3.0
