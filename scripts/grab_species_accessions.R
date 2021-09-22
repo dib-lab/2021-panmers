@@ -17,4 +17,4 @@ metadata_w <- metadata %>%
 lineages_w <- lineages %>% 
   filter(species %in% metadata_w$species)
 
-write_tsv(lineages_w, snakemake@output[["tsv"]])
+write_csv(lineages_w, snakemake@output[["csv"]])
