@@ -14,7 +14,7 @@ class Checkpoint_GatherResults:
     def __init__(self, pattern):
         self.pattern = pattern
 
-    def get_genome_accs(self):
+    def get_genome_accs(self, species):
         gather_csv = f'outputs/genbank/{species}.x.genbank.gather.csv'
         assert os.path.exists(gather_csv)
 
@@ -33,7 +33,7 @@ class Checkpoint_GatherResults:
 
         # wait for the results of rule 'format_bsub_accessions'; 
         # this will trigger exception until that rule has been run.
-        checkpoints.format_species_accessions.get(**w)
+        checkpoints.grab_species_accessions.get(**w)
 
         # parse accessions in gather output file
         genome_accs = self.get_genome_accs(w.species)
@@ -45,26 +45,26 @@ rule all:
     input:
          expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES)
 
-rule grab_species_accessions:
+checkpoing grab_species_accessions:
     input: 
         lineages="/group/ctbrowngrp/gtdb/gtdb-rs202.taxonomy.v2.csv",
         metadata="inputs/metadata_small.tsv"
-    output: csv="outputs/genbank/{species}_acc.csv",
+    output: csv="outputs/genbank/{species}.x.genbank.gather.csv",
     conda: "envs/tidyverse.yml"
     resources:
         mem_mb = 4000
     threads: 1
     script: "scripts/grab_species_accessions.R"
 
-checkpoint format_species_accessions:
-    input: "outputs/genbank/{species}_acc.csv",
-    output: "outputs/genbank/{species}.x.genbank.gather.csv",
-    resources:
-        mem_mb = 4000
-    threads: 1
-    shell:"""
-    sed '1iname,lineage' {input} > {output}
-    """
+#checkpoint format_species_accessions:
+#    input: "outputs/genbank/{species}_acc.csv",
+#    output: "outputs/genbank/{species}.x.genbank.gather.csv",
+#    resources:
+#        mem_mb = 4000
+#    threads: 1
+#    shell:"""
+#    sed '1iname,lineage' {input} > {output}
+#    """
 
 # I don't think we'll need the lineages for anything -- these were
 # generated for charcoal decontamination, but that's not a necessary
@@ -80,17 +80,19 @@ checkpoint format_species_accessions:
 #    """
 
 rule make_genome_grist_conf_files:
-    input: "outputs/genbank/{species}.x.genbank.gather.csv"
+    input: 
+        species=expand("outputs/genbank/{species}.x.genbank.gather.csv", species = SPECIES)
     output:
-        conf="conf/{species}-genome-grist-conf.yml"
+        conf="conf/genome-grist-conf.yml"
     resources:
         mem_mb = 500
     threads: 1
     run:
+        species_list = "\n- ".join(input.species)
         with open(output.conf, 'wt') as fp:
            print(f"""\
 sample:
-- {wildcards.species}
+- {species_list}
 outdir: outputs
 metagenome_trim_memory: 1e9
 """, file=fp)
@@ -103,8 +105,7 @@ metagenome_trim_memory: 1e9
 # written to outputs/sgc, but the conf file has the wrong catlas bases.
 rule download_species_assemblies:
     input: 
-        gather_grist = "outputs/genbank/{species}.x.genbank.gather.csv",
-        conf = "conf/{species}-genome-grist-conf.yml"
+        conf = "conf/genome-grist-conf.yml"
     output: "genbank_genomes/{acc}_genomic.fna.gz"
     conda: "envs/genome-grist.yml"
     resources:
@@ -143,7 +144,7 @@ rule prokka_species_genomes:
     '''
 
 rule roary_species_genomes:
-    input: Checkpoint_GatherResults('outputs/prokka/{species}/{acc}/{acc}.gff')
+    input: Checkpoint_GatherResults('outputs/prokka/{{species}}/{acc}/{acc}.gff')
     output: 'outputs/roary/{species}/pan_genome_reference.fa' 
     conda: 'envs/roary.yml'
     resources:
