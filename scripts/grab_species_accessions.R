@@ -18,4 +18,4 @@ lineages_w <- lineages %>%
   filter(species %in% metadata_w$species) %>%
   select(name = ident, superkingdom, phylum, class, order, family, genus, species)
 
-write_csv(lineages_w, snakemake@output[["csv"]], col_names = F)
+write_csv(lineages_w, snakemake@output[["csv"]])
