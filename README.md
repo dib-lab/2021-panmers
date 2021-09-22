@@ -8,7 +8,7 @@ The core genome is shared by all (>90%) of genomes and accounts for general ecol
 In contrast, the accessory genes are present in one or more genomes. 
 The pangenome reflects metabolic and ecological plasticity of a population.
 Accessory genes facilitate adaptation to environmental changes.
-Pangenomes can be open, where adding additional genomes add more genes to the pangenome, or closed, where adding additional genomes does not add more genes to the pangenome.
+Pangenomes can be open, where adding additional genomes adds more genes to the pangenome, or closed, where adding additional genomes does not add more genes to the pangenome.
 
 To infer a pangenome, coding domain sequences that represent genes are predicted from genome assemblies from many representatives in a clade/group/species.
 Traditionally, these genomes are derived from isolate sequencing, as isolate sequencing libraries should contain sequences from a single genome.
@@ -21,3 +21,12 @@ While genome assembly of isolate sequences often produces genomes that are ~100%
 This complicates metapangenome analysis, as genes that are present in a sample may not be assembled, and therefore would be left unanalyzed in the metapangenome. 
 If amino acid k-mers can be used as a substitue for gene sequences for the construction and interpretation of metapangenomes, assembly would no longer be a necessary prerequisite for metapangenome analysis.
 This would improve metapangenome recall and inference.
+
+## Getting started with this repo
+
+```
+conda env create --name panmers --file environment.yml
+conda activate panmers
+
+snakemake -j 16 --use-conda --rerun-incomplete --latency-wait 15 --resources mem_mb=200000 --cluster "sbatch -t 10080 -J bsub -p bmm -n 1 -N 1 -c {threads} --mem={resources.mem_mb}" -k -n
+```

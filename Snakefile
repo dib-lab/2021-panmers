@@ -54,7 +54,7 @@ rule grab_species_accessions:
     resources:
         mem_mb = 4000
     threads: 1
-    scripts: "scripts/grab_species_accessions.R"
+    script: "scripts/grab_species_accessions.R"
 
 checkpoint format_species_accessions:
     input: "outputs/genbank/{species}_acc.csv",
@@ -150,7 +150,7 @@ rule roary_species_genomes:
         mem_mb = 64000
     threads: 8
     params: 
-        outdir = 'outputs/roary/' + wildcards.species 
+        outdir = lambda wildcards: 'outputs/roary/' + wildcards.species 
     shell:'''
     roary -e -n -f {params.outdir} -p {threads} -z {input}
     '''
