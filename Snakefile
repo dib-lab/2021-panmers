@@ -49,7 +49,7 @@ rule grab_species_accessions:
     input: 
         lineages="/group/ctbrowngrp/gtdb/gtdb-rs202.taxonomy.v2.csv",
         metadata="inputs/metadata_small.tsv"
-    output: "outputs/genbank/{species}_acc.csv",
+    output: csv="outputs/genbank/{species}_acc.csv",
     conda: "envs/tidyverse.yml"
     resources:
         mem_mb = 4000
