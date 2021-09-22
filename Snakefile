@@ -1,6 +1,6 @@
 import pandas as pd
 import csv
-metadata = pd.read_csv("inputs/metadata.tsv", sep = "\t", header = 0)
+metadata = pd.read_csv("inputs/metadata_small.tsv", sep = "\t", header = 0)
 SPECIES = metadata['species_no_space'].tolist()
 
 
@@ -43,18 +43,18 @@ class Checkpoint_GatherResults:
 
 rule all:
     input:
+         expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES)
 
-# TODO grep/python from metadata
-# or write R script to do it
 rule grab_species_accessions:
-    input: "/group/ctbrowngrp/gtdb/gtdb-rs202.taxonomy.v2.csv"
+    input: 
+        lineages="/group/ctbrowngrp/gtdb/gtdb-rs202.taxonomy.v2.csv",
+        metadata="inputs/metadata_small.tsv"
     output: "outputs/genbank/{species}_acc.csv",
+    conda: "envs/tidyverse.yml"
     resources:
         mem_mb = 4000
     threads: 1
-    shell:"""
-    grep -i s__Bacillus {input} | grep -i subtilis > {output}
-    """
+    scripts: "scripts/grab_species_accessions.R"
 
 checkpoint format_species_accessions:
     input: "outputs/genbank/{species}_acc.csv",
