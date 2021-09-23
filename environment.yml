@@ -6,3 +6,4 @@ channels:
 dependencies:
    - snakemake-minimal=6.6.1
    - pandas=1.3.0
+   - feather-format=0.4.1

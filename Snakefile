@@ -45,7 +45,7 @@ rule all:
     input:
          expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES)
 
-checkpoing grab_species_accessions:
+checkpoint grab_species_accessions:
     input: 
         lineages="/group/ctbrowngrp/gtdb/gtdb-rs202.taxonomy.v2.csv",
         metadata="inputs/metadata_small.tsv"
@@ -88,7 +88,7 @@ rule make_genome_grist_conf_files:
         mem_mb = 500
     threads: 1
     run:
-        species_list = "\n- ".join(input.species)
+        species_list = "\n- ".join(wilcards.species)
         with open(output.conf, 'wt') as fp:
            print(f"""\
 sample:
@@ -106,13 +106,22 @@ metagenome_trim_memory: 1e9
 rule download_species_assemblies:
     input: 
         conf = "conf/genome-grist-conf.yml"
-    output: "genbank_genomes/{acc}_genomic.fna.gz"
+    output: "genbank_genomes/download_done.txt"
     conda: "envs/genome-grist.yml"
     resources:
         mem_mb = 8000
     threads: 1
     shell:'''
     genome-grist run {input.conf} --until make_sgc_conf --nolock
+    touch {output}
+    '''
+
+rule ls_download_species_assemblies:
+    input: "genbank_genomes/download_done.txt"
+    output: "genbank_genomes/{acc}_genomic.fna.gz"
+    resources: mem_mb = 500
+    threads: 1
+    shell:'''
     ls {output}
     '''
 
@@ -150,8 +159,61 @@ rule roary_species_genomes:
     resources:
         mem_mb = 64000
     threads: 8
+    benchmark: "benchmarks/roary/{species}.txt"
     params: 
         outdir = lambda wildcards: 'outputs/roary/' + wildcards.species 
     shell:'''
     roary -e -n -f {params.outdir} -p {threads} -z {input}
+    mv {params.outdir}* {params.outdir}
     '''
+
+rule sourmash_sketch_species_genomes:
+    input: 'outputs/prokka/{species}/{acc}/{acc}.faa'
+    output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled1.sig' 
+    conda: 'envs/roary.yml'
+    resources:
+        mem_mb = 4000
+    threads: 1
+    benchmark: "benchmarks/sourmash_sketch/{species}_{acc}.txt"
+    shell:"""
+    sourmash sketch protein -p k=10,scaled=1 -o {output} --name {wildcards.acc} {input}
+    """
+
+rule convert_signature_to_csv:
+    input: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled1.sig'
+    output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled1.csv'
+    conda: 'envs/sourmash.yml'
+    threads: 1
+    resources:
+        mem_mb=2000
+    shell:'''
+    python scripts/sig_to_csv.py {input} {output}
+    '''
+
+rule make_hash_table_long:
+    input: 
+        Checkpoint_GatherResults("outputs/sourmash_sketch/{{species}}/{acc}_k10_scaled1.csv")
+    output: csv = "outputs/sourmash_sketch_tables/{species}_k10_scaled1_long.csv"
+    conda: 'envs/r.yml'
+    threads: 1
+    resources:
+        mem_mb=64000
+    script: "scripts/sketch_csv_to_long.R"
+
+rule make_hash_table_wide:
+    input:  "outputs/sourmash_sketch_tables/{species}_k10_scaled1_long.csv"
+    output: "outputs/sourmash_sketch_tables/{species}_k10_scaled1_wide.feather"
+    threads: 1
+    resources:
+        mem_mb=300000
+    run:
+        import pandas as pd
+        import feather
+        
+        tab = pd.read_csv(str(input), dtype = {"minhash" : "int64", "abund" : "float64", "sample" : "object"})
+        tab_wide=tab.pivot(index='sample', columns='minhash', values='abund')
+        tab_wide = tab_wide.fillna(0)
+        tab_wide['acc'] = tab_wide.index
+        tab_wide = tab_wide.reset_index(drop=True)
+        tab_wide.columns = tab_wide.columns.astype(str)
+        tab_wide.to_feather(str(output)) 
