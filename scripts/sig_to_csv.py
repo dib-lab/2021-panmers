@@ -23,13 +23,13 @@ def main():
     loaded_sig = siglist[0]
 
     # Get the minhashes
-    mins = loaded_sig.minhash.get_mins(with_abundance = False)
+    mins = loaded_sig.minhash.hashes.keys()
     
     name = os.path.basename(args.signature)
-    df = pd.DataFrame.from_dict(mins, orient = 'index', columns=[name])
+    df = pd.DataFrame(mins, columns=[name])
     
     # write to a csv
-    df.to_csv(args.output, index_label= "minhash")
+    df.to_csv(args.output, index = False)
 
 if __name__ == '__main__':
     sys.exit(main())

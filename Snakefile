@@ -171,7 +171,7 @@ rule roary_species_genomes:
 rule sourmash_sketch_species_genomes:
     input: 'outputs/prokka/{species}/{acc}/{acc}.faa'
     output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled1.sig' 
-    conda: 'envs/roary.yml'
+    conda: 'envs/sourmash.yml'
     resources:
         mem_mb = 4000
     threads: 1
@@ -211,8 +211,8 @@ rule make_hash_table_wide:
         import pandas as pd
         import feather
         
-        tab = pd.read_csv(str(input), dtype = {"minhash" : "int64", "abund" : "float64", "sample" : "object"})
-        tab_wide=tab.pivot(index='sample', columns='minhash', values='abund')
+        tab = pd.read_csv(str(input), dtype = {"minhash" : "float64", "acc" : "object", "present" : "int64"})
+        tab_wide=tab.pivot(index='acc', columns='minhash', values='present')
         tab_wide = tab_wide.fillna(0)
         tab_wide['acc'] = tab_wide.index
         tab_wide = tab_wide.reset_index(drop=True)
