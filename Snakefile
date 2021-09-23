@@ -43,7 +43,8 @@ class Checkpoint_GatherResults:
 
 rule all:
     input:
-         expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES)
+         expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES),
+         expand("outputs/sourmash_sketch_tables/{species}_k10_scaled1_wide.feather", species = SPECIES)
 
 checkpoint grab_species_accessions:
     input: 
