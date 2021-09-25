@@ -28,5 +28,5 @@ This would improve metapangenome recall and inference.
 conda env create --name panmers --file environment.yml
 conda activate panmers
 
-snakemake -j 16 --use-conda --rerun-incomplete --latency-wait 15 --resources mem_mb=200000 --cluster "sbatch -t 10080 -J bsub -p bmm -n 1 -N 1 -c {threads} --mem={resources.mem_mb}" -k -n
+snakemake -j 16 --use-conda --rerun-incomplete --latency-wait 15 --resources mem_mb=200000 --cluster "sbatch -t 10080 -J pm -p bmm -n 1 -N 1 -c {threads} --mem={resources.mem_mb}" -k -n
 ```
