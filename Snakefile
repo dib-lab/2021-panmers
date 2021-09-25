@@ -1,6 +1,8 @@
 import pandas as pd
 import csv
-metadata = pd.read_csv("inputs/metadata_small.tsv", sep = "\t", header = 0)
+import re
+
+metadata = pd.read_csv("inputs/metadata.tsv", sep = "\t", header = 0)
 SPECIES = metadata['species_no_space'].tolist()
 
 
@@ -49,7 +51,7 @@ rule all:
 checkpoint grab_species_accessions:
     input: 
         lineages="/group/ctbrowngrp/gtdb/gtdb-rs202.taxonomy.v2.csv",
-        metadata="inputs/metadata_small.tsv"
+        metadata="inputs/metadata.tsv"
     output: csv="outputs/genbank/{species}.x.genbank.gather.csv",
     conda: "envs/tidyverse.yml"
     resources:
@@ -80,7 +82,7 @@ checkpoint grab_species_accessions:
 #    sed 's/,/_genomic.fna.gz,/1' {input} > {output}
 #    """
 
-rule make_genome_grist_conf_files:
+rule make_genome_grist_conf_file:
     input: 
         species=expand("outputs/genbank/{species}.x.genbank.gather.csv", species = SPECIES)
     output:
@@ -89,7 +91,9 @@ rule make_genome_grist_conf_files:
         mem_mb = 500
     threads: 1
     run:
-        species_list = "\n- ".join(wilcards.species)
+        species_list = [re.sub("outputs/genbank/", "", x) for x in input.species]
+        species_list = [re.sub(".x.genbank.gather.csv", "", x) for x in species_list]
+        species_list = "\n- ".join(species_list)
         with open(output.conf, 'wt') as fp:
            print(f"""\
 sample:
@@ -98,8 +102,6 @@ outdir: outputs
 metagenome_trim_memory: 1e9
 """, file=fp)
 
-    
-       
 # specifying make_sgc_conf as the target downloads the genomes of interest,
 # circumventing a bug in genome grist that prevents using the target
 # download gather genomes. The sgc conf file is a dummy file -- it will be
