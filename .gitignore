@@ -1,3 +1,4 @@
 slurm*out
 slurm/*
 slurm
+.snakemake
