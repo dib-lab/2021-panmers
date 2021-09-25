@@ -5,6 +5,10 @@ library(tibble)
 library(arrow)
 library(ggplot2)
 library(vegan)
+library(broom)
+
+
+# functions ---------------------------------------------------------------
 
 read_roary_presence_absence <- function(path){
   roary <- read_csv(path) %>%
@@ -21,77 +25,92 @@ read_roary_presence_absence <- function(path){
 }
 
 read_mers_presence_absence <- function(path) {
-  mers <- arrow::read_feather("outputs/sourmash_sketch_tables/s__Faecalibacterium-prausnitzii_D_k10_scaled1_wide.feather")
+  mers <- arrow::read_feather(path)
   mers$acc <- gsub("_k10_scaled1", "", mers$acc)
   mers$acc <- make_clean_names(mers$acc)
   mers <- as.data.frame(mers)
   rownames(mers) <- mers$acc
-  mers <- column_to_rownames(mers, var = "acc")
+  mers <- mers[ , -ncol(mers)]
 }
 
+correlate_total_per_genome <- function(roary, mers, species){
+  
+  total_genes_per_genome <- rowSums(roary)
+  total_mers_per_genome <- rowSums(mers)
+  
+  total_per_genome <- data.frame(total_genes_per_genome, total_mers_per_genome)
+  
+  lm_result <- lm(total_genes_per_genome ~ total_mers_per_genome, data = total_per_genome) %>%
+    glance() %>%
+    mutate(species = species)
+  
+  r_squared <- round(lm_result$r.squared, digits = 2)
+  p_value <- ifelse(lm_result$p.value > 0.001, 
+                    paste0("= ", round(lm_result$p.value, digits = 3)), 
+                    "< 0.001")
+  
+  plt <- ggplot(total_per_genome, aes(x = total_genes_per_genome, y = total_mers_per_genome)) +
+    geom_point() +
+    theme_minimal() +
+    labs(x = "genes per genome", y = "k-mers per genome (protein, k=10, scaled=1)", 
+         title = species,
+         subtitle = paste0("R-squared:  ", r_squared, " (p ", p_value, ")"))
+  
+  return(list(lm_result = lm_result, plt = plt))
+}
 
+correlate_unique_per_genome <- function(roary, mers, species) {
+  # filter roary to columns that sum to 1, aka genes that are unique
+  roary_unique <- roary[ , colSums(roary == 1) == 1]
+  roary_unique <- rowSums(roary_unique)
+  mers_unique <- mers[ , colSums(mers == 1) == 1]
+  mers_unique <- rowSums(mers_unique)
+  unique_per_genome <- data.frame(roary_unique, mers_unique)
+  
+  lm_result <- lm(roary_unique ~ mers_unique, data = unique_per_genome) %>%
+    glance() %>%
+    mutate(species = species)
+  
+  r_squared <- round(lm_result$r.squared, digits = 2)
+  p_value <- ifelse(lm_result$p.value > 0.001, 
+                    paste0("= ", round(lm_result$p.value, digits = 3)), 
+                    "< 0.001")
+  
+  ggplot(unique_per_genome, aes(x = roary_unique, y = mers_unique)) +
+    geom_point() +
+    theme_minimal() +
+    labs(x = "unique genes per genome", y = "unique k-mers per genome (protein, k=10, scaled=1)", 
+         title = species,
+         subtitle = paste0("R-squared:  ", r_squared, " (p ", p_value, ")"))
+  
+  return(list(lm_result = lm_result, plt = plt))
+}
 
+mantel_roary_and_mers <- function(roary, mers, species){
+  roary_dist <- dist(roary, method = "binary")
+  mers_dist <- dist(mers, method = "binary")
+  mantel_res <- mantel(roary_dist, mers_dist, method = "spearman", 
+                       permutations = 9999, na.rm = TRUE)
+  mantel_res <- data.frame(species = species, 
+                           statistic = mantel_res$statistic,
+                           signif = mantel_res$signif)
+  return(mantel_res)
+}
 
+# apply -------------------------------------------------------------------
 
+roary <- read_roary_presence_absence(path = "outputs/roary/s__Cuniculiplasma-divulgatum/gene_presence_absence.csv")
+mers <- read_mers_presence_absence(path = "outputs/sourmash_sketch_tables/s__Cuniculiplasma-divulgatum_k10_scaled1_wide.feather")
 
 # correlate number of genes with number of kmers --------------------------
-total_genes_per_genome <- rowSums(roary)
-total_mers_per_genome <- rowSums(mers)
+species <- "s__Cuniculiplasma-divulgatum"
 
-total_per_genome <- data.frame(total_genes_per_genome, total_mers_per_genome)
-ggplot(total_per_genome, aes(x = total_genes_per_genome, y = total_mers_per_genome)) +
-  geom_point() +
-  theme_minimal() +
-  labs(x = "genes per genome", y = "amino acid k-mers per genome (k = 10)", 
-       title = "s__Faecalibacterium-prausnitzii_D",
-       subtitle = "R-squared:  0.9605 (p < 0.001)")
-summary(lm(total_genes_per_genome ~ total_mers_per_genome, data = total_per_genome))
+correlate_total_per_genome(roary = roary, mers = mers, species = species)
 
 # mantel test between presence/absence matrices ---------------------------
 
-roary_dist <- dist(roary, method = "binary")
-mers_dist <- dist(mers, method = "binary")
-mantel_res <- mantel(roary_dist, mers_dist, method = "spearman", 
-                     permutations = 9999, na.rm = TRUE)
-mantel_res
-# Mantel statistic r: 0.9782 
-# Significance: 1e-04
+mantel_roary_and_mers(roary = roary, mers = mers, species = species)
 
 # correlate number of unique genes with number of unique kmers ------------
 
-# filter roary to columns that sum to 1, aka genes that are unique
-roary_unique <- roary[ , colSums(roary == 1) == 1]
-roary_unique <- rowSums(roary_unique)
-mers_unique <- mers[ , colSums(mers == 1) == 1]
-mers_unique <- rowSums(mers_unique)
-
-unique_per_genome <- data.frame(roary_unique, mers_unique)
-ggplot(unique_per_genome, aes(x = roary_unique, y = mers_unique)) +
-  geom_point() +
-  theme_minimal() +
-  labs(x = "unique genes per genome", y = "unique amino acid k-mers per genome (k = 10)", 
-       title = "s__Faecalibacterium-prausnitzii_D",
-       subtitle = "R-squared:  0.9872 (p < 0.001)")
-summary(lm(roary_unique ~ mers_unique, data = unique_per_genome))
-
-# do the rarefaction curves match? ----------------------------------------
-
-?specaccum
-
-sp_roary <- specaccum(roary, "exact")
-sp_roary_df <- data.frame(genomes = sp_roary$sites, genes = sp_roary$richness, sd = sp_roary$sd) 
-
-ggplot() +
-  geom_ribbon(data = sp_roary_df, aes(x = genomes, y = genes, ymin = genes - sd, ymax = genes + sd), fill = "grey", alpha = 1/3) +
-  geom_point(data = sp_roary_df, aes(x = genomes, y = genes), size = 1) + 
-  theme_minimal() +
-  labs(title = "s__Faecalibacterium-prausnitzii_D genes")
-
-sp_mers <- specaccum(mers, "exact")
-sp_mers_df <- data.frame(genomes = sp_mers$sites, mers = sp_mers$richness, sd = sp_mers$sd) 
-
-ggplot() +
-  geom_ribbon(data = sp_mers_df, aes(x = genomes, y = mers, ymin = mers - sd, ymax = mers + sd), fill = "grey", alpha = 1/3) +
-  geom_point(data = sp_mers_df, aes(x = genomes, y = mers), size = 1) + 
-  theme_minimal() +
-  labs(title = "s__Faecalibacterium-prausnitzii_D amino acid kmers (k = 10)")
+correlate_unique_per_genome(roary = roary, mers = mers, species = species)
