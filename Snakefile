@@ -157,7 +157,9 @@ rule prokka_species_genomes:
 
 rule roary_species_genomes:
     input: Checkpoint_GatherResults('outputs/prokka/{{species}}/{acc}/{acc}.gff')
-    output: 'outputs/roary/{species}/pan_genome_reference.fa' 
+    output: 
+        'outputs/roary/{species}/pan_genome_reference.fa',
+        'outputs/roary/{species}/gene_presence_absence.csv' 
     conda: 'envs/roary.yml'
     resources:
         mem_mb = 64000
@@ -220,3 +222,18 @@ rule make_hash_table_wide:
         tab_wide = tab_wide.reset_index(drop=True)
         tab_wide.columns = tab_wide.columns.astype(str)
         tab_wide.to_feather(str(output)) 
+
+rule correlate_pan_units:
+    input:
+        roary="outputs/roary/{species}/gene_presence_absence.csv",
+        mers="outputs/sourmash_sketch_tables/{species}_k10_scaled1_wide.feather"
+    output:
+        genes="outputs/correlate_pan_units/{species}_genes.tsv",
+        genes_pdf="outputs/correlate_pan_units/{species}_genes.pdf",
+        unique="outputs/correlate_pan_units/{species}_unique.tsv",
+        unique_pdf="outputs/correlate_pan_units/{species}_unique.pdf",
+        mantel="outputs/correlate_pan_units/{species}_mantel.tsv",
+    threads: 1
+    resources: mem_mb=16000
+    conda: "envs/r_cor_pan.yml"
+    script: "scripts/correlate_pan_units.R"
