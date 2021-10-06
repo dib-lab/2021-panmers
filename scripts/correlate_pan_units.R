@@ -1,12 +1,11 @@
-library(dplyr)
-library(readr)
-library(janitor)
-library(tibble)
+library(dplyr) #
+library(readr) #
+library(janitor) 
+library(tibble) #
 library(arrow)
-library(ggplot2)
+library(ggplot2) #
 library(vegan)
 library(broom)
-
 
 # functions ---------------------------------------------------------------
 
@@ -99,18 +98,26 @@ mantel_roary_and_mers <- function(roary, mers, species){
 
 # apply -------------------------------------------------------------------
 
-roary <- read_roary_presence_absence(path = "outputs/roary/s__Cuniculiplasma-divulgatum/gene_presence_absence.csv")
-mers <- read_mers_presence_absence(path = "outputs/sourmash_sketch_tables/s__Cuniculiplasma-divulgatum_k10_scaled1_wide.feather")
-
+roary <- read_roary_presence_absence(path = snakemake@input[["roary"]])
+mers <- read_mers_presence_absence(path = snakemake@input[["mers"]])
+species <- unlist(snakemake@wildcards[['species']])
 # correlate number of genes with number of kmers --------------------------
-species <- "s__Cuniculiplasma-divulgatum"
 
-correlate_total_per_genome(roary = roary, mers = mers, species = species)
+total_per_genome <- correlate_total_per_genome(roary = roary, mers = mers, species = species)
 
-# mantel test between presence/absence matrices ---------------------------
-
-mantel_roary_and_mers(roary = roary, mers = mers, species = species)
-
+write_tsv(total_per_genome$lm_result, snakemake@output[['genes']])
+pdf(snakemake@output[['genes_pdf']], height = 3, width = 3)
+total_per_genome$plt
+dev.off()
 # correlate number of unique genes with number of unique kmers ------------
 
-correlate_unique_per_genome(roary = roary, mers = mers, species = species)
+unique_per_genome <- correlate_unique_per_genome(roary = roary, mers = mers, species = species)
+
+write_tsv(unique_per_genome$lm_result, snakemake@output[['unique']])
+pdf(snakemake@output[['unique_pdf']], height = 3, width = 3)
+unique_per_genome$plt
+dev.off()
+# mantel test between presence/absence matrices ---------------------------
+
+mantel_results <- mantel_roary_and_mers(roary = roary, mers = mers, species = species)
+write_tsv(mantel_results, snakemake@output[['mantel']])
