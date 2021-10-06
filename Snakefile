@@ -47,7 +47,8 @@ class Checkpoint_GatherResults:
 rule all:
     input:
          expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES),
-         expand("outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather", species = SPECIES, scaled = SCALED)
+         expand("outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather", species = SPECIES, scaled = SCALED),
+         expand("outputs/correlate_pan_units/scaled{scaled}/{species}_genes.tsv", species = SPECIES, scaled = SCALED)
 
 checkpoint grab_species_accessions:
     input: 
@@ -228,13 +229,13 @@ rule make_hash_table_wide:
 rule correlate_pan_units:
     input:
         roary="outputs/roary/{species}/gene_presence_absence.csv",
-        mers="outputs/sourmash_sketch_tables/{species}_k10_scaled1_wide.feather"
+        mers="outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather"
     output:
-        genes="outputs/correlate_pan_units/{species}_genes.tsv",
-        genes_pdf="outputs/correlate_pan_units/{species}_genes.pdf",
-        unique="outputs/correlate_pan_units/{species}_unique.tsv",
-        unique_pdf="outputs/correlate_pan_units/{species}_unique.pdf",
-        mantel="outputs/correlate_pan_units/{species}_mantel.tsv",
+        genes="outputs/correlate_pan_units/scaled{scaled}/{species}_genes.tsv",
+        genes_pdf="outputs/correlate_pan_units/scaled{scaled}/{species}_genes.pdf",
+        unique="outputs/correlate_pan_units/scaled{scaled}/{species}_unique.tsv",
+        unique_pdf="outputs/correlate_pan_units/scaled{scaled}/{species}_unique.pdf",
+        mantel="outputs/correlate_pan_units/scaled{scaled}/{species}_mantel.tsv",
     threads: 1
     resources: mem_mb=16000
     conda: "envs/r_cor_pan.yml"
