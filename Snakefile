@@ -5,6 +5,7 @@ import re
 metadata = pd.read_csv("inputs/metadata.tsv", sep = "\t", header = 0)
 SPECIES = metadata['species_no_space'].tolist()
 
+SCALED = [1, 100]
 
 class Checkpoint_GatherResults:
     """
@@ -46,7 +47,7 @@ class Checkpoint_GatherResults:
 rule all:
     input:
          expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES),
-         expand("outputs/sourmash_sketch_tables/{species}_k10_scaled1_wide.feather", species = SPECIES)
+         expand("outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather", species = SPECIES, scaled = SCALED)
 
 checkpoint grab_species_accessions:
     input: 
@@ -167,24 +168,25 @@ rule roary_species_genomes:
         outdir = lambda wildcards: 'outputs/roary/' + wildcards.species 
     shell:'''
     roary -e -n -f {params.outdir} -p {threads} -z {input}
-    mv {params.outdir}* {params.outdir}
+    mv {params.outdir}_*/* {params.outdir}/
+    rmdir {params.outdir}_*
     '''
 
 rule sourmash_sketch_species_genomes:
     input: 'outputs/prokka/{species}/{acc}/{acc}.faa'
-    output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled1.sig' 
+    output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled{scaled}.sig' 
     conda: 'envs/sourmash.yml'
     resources:
         mem_mb = 4000
     threads: 1
-    benchmark: "benchmarks/sourmash_sketch/{species}_{acc}.txt"
+    benchmark: "benchmarks/sourmash_sketch/{species}_{acc}_scaled{scaled}.txt"
     shell:"""
-    sourmash sketch protein -p k=10,scaled=1 -o {output} --name {wildcards.acc} {input}
+    sourmash sketch protein -p k=10,scaled={wildcards.scaled} -o {output} --name {wildcards.acc} {input}
     """
 
 rule convert_signature_to_csv:
-    input: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled1.sig'
-    output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled1.csv'
+    input: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled{scaled}.sig'
+    output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled{scaled}.csv'
     conda: 'envs/sourmash.yml'
     threads: 1
     resources:
@@ -195,8 +197,8 @@ rule convert_signature_to_csv:
 
 rule make_hash_table_long:
     input: 
-        Checkpoint_GatherResults("outputs/sourmash_sketch/{{species}}/{acc}_k10_scaled1.csv")
-    output: csv = "outputs/sourmash_sketch_tables/{species}_k10_scaled1_long.csv"
+        Checkpoint_GatherResults("outputs/sourmash_sketch/{{species}}/{acc}_k10_scaled{scaled}.csv")
+    output: csv = "outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_long.csv"
     conda: 'envs/r.yml'
     threads: 1
     resources:
@@ -204,8 +206,8 @@ rule make_hash_table_long:
     script: "scripts/sketch_csv_to_long.R"
 
 rule make_hash_table_wide:
-    input:  "outputs/sourmash_sketch_tables/{species}_k10_scaled1_long.csv"
-    output: "outputs/sourmash_sketch_tables/{species}_k10_scaled1_wide.feather"
+    input:  "outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_long.csv"
+    output: "outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather"
     threads: 1
     resources:
         mem_mb=300000
