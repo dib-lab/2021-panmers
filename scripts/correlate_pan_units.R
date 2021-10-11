@@ -75,7 +75,7 @@ correlate_unique_per_genome <- function(roary, mers, species) {
                     paste0("= ", round(lm_result$p.value, digits = 3)), 
                     "< 0.001")
   
-  ggplot(unique_per_genome, aes(x = roary_unique, y = mers_unique)) +
+  plt <- ggplot(unique_per_genome, aes(x = roary_unique, y = mers_unique)) +
     geom_point() +
     theme_minimal() +
     labs(x = "unique genes per genome", y = "unique k-mers per genome (protein, k=10, scaled=1)", 
