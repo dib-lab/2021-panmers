@@ -213,7 +213,7 @@ rule make_hash_table_wide:
     output: "outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather"
     threads: 1
     resources:
-        mem_mb=300000
+        mem_mb=180000
     run:
         import pandas as pd
         import feather
