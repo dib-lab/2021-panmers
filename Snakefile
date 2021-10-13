@@ -164,15 +164,15 @@ rule roary_species_genomes:
         'outputs/roary/{species}/gene_presence_absence.csv' 
     conda: 'envs/roary.yml'
     resources:
-        mem_mb = 64000
+        mem_mb = 10000
     threads: 8
     benchmark: "benchmarks/roary/{species}.txt"
     params: 
         outdir = lambda wildcards: 'outputs/roary/' + wildcards.species 
     shell:'''
     roary -e -n -f {params.outdir} -p {threads} -z {input}
-    mv {params.outdir}_*/* {params.outdir}/
-    rmdir {params.outdir}_*
+    mv {params.outdir}_[0-9]*/* {params.outdir}/
+    rmdir {params.outdir}_[0-9]*
     '''
 
 rule sourmash_sketch_species_genomes:
@@ -237,6 +237,6 @@ rule correlate_pan_units:
         unique_pdf="outputs/correlate_pan_units/scaled{scaled}/{species}_unique.pdf",
         mantel="outputs/correlate_pan_units/scaled{scaled}/{species}_mantel.tsv",
     threads: 1
-    resources: mem_mb=16000
+    resources: mem_mb=32000
     conda: "envs/r_cor_pan.yml"
     script: "scripts/correlate_pan_units.R"
