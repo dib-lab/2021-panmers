@@ -4,8 +4,24 @@ import re
 
 metadata = pd.read_csv("inputs/metadata.tsv", sep = "\t", header = 0)
 SPECIES = metadata['species_no_space'].tolist()
+SCALED = [100]
 
-SCALED = [1, 100]
+# Snakemake will use the ALPHA_KSIZE wildcard from rule all to generate output file names
+# Then, snakemake will back propagate the strings from the final file names to solve for
+# the wildcards "alphabet" and "ksize" throughout the rest of the workflow. 
+# The underscore for the chrs in the list ALPHA_KSIZE separates the alphabet string from 
+# the ksize string, allowing snakemake to solve {alphabet}_{ksize} wildcard strings. 
+# Therefore, the chrs in the ALPHA_KSIZE list also set the alphabet names as "dayhoff" and "protein".
+
+# set constrained k sizes
+protein_ksizes = [7, 8, 9, 10, 11]
+dayhoff_ksizes = [13, 15, 17]
+hp_ksizes      = [27, 31]
+# combine
+ALPHA_KSIZE  = expand('protein-k{k}', k=protein_ksizes)
+ALPHA_KSIZE += expand('dayhoff-k{k}', k=dayhoff_ksizes)
+ALPHA_KSIZE += expand('hp-k{k}',      k=hp_ksizes)
+
 
 class Checkpoint_GatherResults:
     """
@@ -46,9 +62,7 @@ class Checkpoint_GatherResults:
 
 rule all:
     input:
-         expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES),
-         expand("outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather", species = SPECIES, scaled = SCALED),
-         expand("outputs/correlate_pan_units/scaled{scaled}/{species}_genes.tsv", species = SPECIES, scaled = SCALED)
+        expand("outputs/correlate_pan_units/{alpha_ksize}_scaled{scaled}/{species}_genes.tsv", alpha_ksize = ALPHA_KSIZE, scaled = SCALED, species = SPECIES)
 
 checkpoint grab_species_accessions:
     input: 
@@ -61,28 +75,6 @@ checkpoint grab_species_accessions:
     threads: 1
     script: "scripts/grab_species_accessions.R"
 
-#checkpoint format_species_accessions:
-#    input: "outputs/genbank/{species}_acc.csv",
-#    output: "outputs/genbank/{species}.x.genbank.gather.csv",
-#    resources:
-#        mem_mb = 4000
-#    threads: 1
-#    shell:"""
-#    sed '1iname,lineage' {input} > {output}
-#    """
-
-# I don't think we'll need the lineages for anything -- these were
-# generated for charcoal decontamination, but that's not a necessary
-# step in this pipeline. Leave rule here for now just in case.
-#rule generate_species_lineages:
-#    input: "outputs/genbank/bsub_acc.csv"
-#    output: "outputs/genbank/bsub_assemblies.x.genbank.lineages.csv",
-#    resources:
-#        mem_mb = 4000
-#    threads: 1
-#    shell:"""
-#    sed 's/,/_genomic.fna.gz,/1' {input} > {output}
-#    """
 
 rule make_genome_grist_conf_file:
     input: 
@@ -177,21 +169,22 @@ rule roary_species_genomes:
 
 rule sourmash_sketch_species_genomes:
     input: 'outputs/prokka/{species}/{acc}/{acc}.faa'
-    output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled{scaled}.sig' 
+    output: 'outputs/sourmash_sketch/{alpha}-k{ksize}_scaled{scaled}/{species}/{acc}.sig' 
     conda: 'envs/sourmash.yml'
     resources:
         mem_mb = 4000
     threads: 1
-    benchmark: "benchmarks/sourmash_sketch/{species}_{acc}_scaled{scaled}.txt"
+    benchmark: "benchmarks/sourmash_sketch_sig/{alpha}-k{ksize}_scaled{scaled}_{species}_{acc}.txt"
     shell:"""
-    sourmash sketch protein -p k=10,scaled={wildcards.scaled} -o {output} --name {wildcards.acc} {input}
+    sourmash sketch protein -p k={wildcards.ksize},scaled={wildcards.scaled},{wildcards.alpha} -o {output} --name {wildcards.acc} {input}
     """
 
 rule convert_signature_to_csv:
-    input: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled{scaled}.sig'
-    output: 'outputs/sourmash_sketch/{species}/{acc}_k10_scaled{scaled}.csv'
+    input: 'outputs/sourmash_sketch/{alpha}-k{ksize}_scaled{scaled}/{species}/{acc}.sig'
+    output: 'outputs/sourmash_sketch/{alpha}-k{ksize}_scaled{scaled}/{species}/{acc}.csv'
     conda: 'envs/sourmash.yml'
     threads: 1
+    benchmark: "benchmarks/sourmash_sketch_csv/{alpha}-k{ksize}_scaled{scaled}_{species}_{acc}.txt"
     resources:
         mem_mb=2000
     shell:'''
@@ -200,20 +193,22 @@ rule convert_signature_to_csv:
 
 rule make_hash_table_long:
     input: 
-        Checkpoint_GatherResults("outputs/sourmash_sketch/{{species}}/{acc}_k10_scaled{scaled}.csv")
-    output: csv = "outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_long.csv"
+        Checkpoint_GatherResults("outputs/sourmash_sketch/{{alpha}}-k{{ksize}}_scaled{{scaled}}/{{species}}/{acc}.csv")
+    output: csv = "outputs/sourmash_sketch_tables/{alpha}-k{ksize}_scaled{scaled}/{species}_long.csv"
     conda: 'envs/r.yml'
     threads: 1
+    benchmark: "benchmarks/sourmash_sketch_tables_long/{alpha}-k{ksize}_scaled{scaled}_{species}.txt"
     resources:
         mem_mb=64000
     script: "scripts/sketch_csv_to_long.R"
 
 rule make_hash_table_wide:
-    input:  "outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_long.csv"
-    output: "outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather"
+    input:  "outputs/sourmash_sketch_tables/{alpha}-k{ksize}_scaled{scaled}/{species}_long.csv"
+    output: "outputs/sourmash_sketch_tables/{alpha}-k{ksize}_scaled{scaled}/{species}_wide.feather"
     threads: 1
+    benchmark: "benchmarks/sourmash_sketch_tables_wide/{alpha}-k{ksize}_scaled{scaled}_{species}.txt"
     resources:
-        mem_mb=180000
+        mem_mb=32000
     run:
         import pandas as pd
         import feather
@@ -229,14 +224,15 @@ rule make_hash_table_wide:
 rule correlate_pan_units:
     input:
         roary="outputs/roary/{species}/gene_presence_absence.csv",
-        mers="outputs/sourmash_sketch_tables/{species}_k10_scaled{scaled}_wide.feather"
+        mers="outputs/sourmash_sketch_tables/{alpha}-k{ksize}_scaled{scaled}/{species}_wide.feather"
     output:
-        genes="outputs/correlate_pan_units/scaled{scaled}/{species}_genes.tsv",
-        genes_pdf="outputs/correlate_pan_units/scaled{scaled}/{species}_genes.pdf",
-        unique="outputs/correlate_pan_units/scaled{scaled}/{species}_unique.tsv",
-        unique_pdf="outputs/correlate_pan_units/scaled{scaled}/{species}_unique.pdf",
-        mantel="outputs/correlate_pan_units/scaled{scaled}/{species}_mantel.tsv",
+        genes="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_genes.tsv",
+        genes_pdf="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_genes.pdf",
+        unique="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_unique.tsv",
+        unique_pdf="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_unique.pdf",
+        mantel="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_mantel.tsv",
     threads: 1
-    resources: mem_mb=32000
+    resources: mem_mb=6000
+    benchmark: "benchmarks/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}_{species}.txt"
     conda: "envs/r_cor_pan.yml"
     script: "scripts/correlate_pan_units.R"
