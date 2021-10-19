@@ -230,6 +230,7 @@ rule correlate_pan_units:
         genes_pdf="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_genes.pdf",
         unique="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_unique.tsv",
         unique_pdf="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_unique.pdf",
+        specaccum_pdf = "outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_specaccum.pdf"
         mantel="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_mantel.tsv",
     threads: 1
     resources: mem_mb=6000
