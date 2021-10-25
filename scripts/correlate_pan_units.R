@@ -96,7 +96,7 @@ correlate_unique_per_genome <- function(roary, mers, species, alpha, ksize, scal
   return(list(lm_result = lm_result, plt = plt))
 }
 
-correlate_specaccum <- function(roary, mers, speciesalpha, ksize, scaled){
+correlate_specaccum <- function(roary, mers, species, alpha, ksize, scaled){
   plot_params <- paste0("(", alpha, ", k=", ksize, ", scaled=", scaled, ")")
   
   sp_roary <- specaccum(roary, "exact")
@@ -145,7 +145,7 @@ correlate_specaccum <- function(roary, mers, speciesalpha, ksize, scaled){
          title = "Accumulation curve values per genome added",
          subtitle = paste0("R-squared:  ", r_squared, " (p ", p_value, ")"))
   
-  ggarrange(specaccum_plt, specaccum_cor_plt)
+  return(ggarrange(specaccum_plt, specaccum_cor_plt))
   
 }
 
