@@ -2,6 +2,8 @@ import pandas as pd
 import csv
 import re
 
+TMPDIR = "scratch/tereiter/"
+
 metadata = pd.read_csv("inputs/metadata.tsv", sep = "\t", header = 0)
 SPECIES = metadata['species_no_space'].tolist()
 SCALED = [100]
@@ -71,7 +73,8 @@ checkpoint grab_species_accessions:
     output: csv="outputs/genbank/{species}.x.genbank.gather.csv",
     conda: "envs/tidyverse.yml"
     resources:
-        mem_mb = 4000
+        mem_mb = 4000,
+        tmpdir = TMPDIR
     threads: 1
     script: "scripts/grab_species_accessions.R"
 
@@ -82,7 +85,8 @@ rule make_genome_grist_conf_file:
     output:
         conf="conf/genome-grist-conf.yml"
     resources:
-        mem_mb = 500
+        mem_mb = 500,
+        tmpdir = TMPDIR
     threads: 1
     run:
         species_list = [re.sub("outputs/genbank/", "", x) for x in input.species]
@@ -106,7 +110,8 @@ rule download_species_assemblies:
     output: "genbank_genomes/download_done.txt"
     conda: "envs/genome-grist.yml"
     resources:
-        mem_mb = 8000
+        mem_mb = 8000,
+        tmpdir = TMPDIR
     threads: 1
     shell:'''
     genome-grist run {input.conf} --until make_sgc_conf --nolock
@@ -116,7 +121,9 @@ rule download_species_assemblies:
 rule ls_download_species_assemblies:
     input: "genbank_genomes/download_done.txt"
     output: "genbank_genomes/{acc}_genomic.fna.gz"
-    resources: mem_mb = 500
+    resources: 
+        mem_mb = 500,
+        tmpdir = TMPDIR
     threads: 1
     shell:'''
     ls {output}
@@ -126,7 +133,8 @@ rule gunzip_species_genomes:
     input: "genbank_genomes/{acc}_genomic.fna.gz"
     output: "genbank_genomes/{acc}_genomic.fna"
     resources:
-        mem_mb = 1000
+        mem_mb = 1000,
+        tmpdir = TMPDIR
     threads: 1
     shell:'''
     gunzip -c {input} > {output}
@@ -140,7 +148,8 @@ rule prokka_species_genomes:
     input: 'genbank_genomes/{acc}_genomic.fna'
     conda: 'envs/prokka.yml'
     resources:
-        mem_mb = 8000
+        mem_mb = 8000,
+        tmpdir = TMPDIR
     threads: 2
     params: 
         outdir = lambda wildcards: 'outputs/prokka/' + wildcards.species + "/" +  wildcards.acc
@@ -156,7 +165,8 @@ rule roary_species_genomes:
         'outputs/roary/{species}/gene_presence_absence.csv' 
     conda: 'envs/roary.yml'
     resources:
-        mem_mb = 10000
+        mem_mb = 10000,
+        tmpdir = TMPDIR
     threads: 8
     benchmark: "benchmarks/roary/{species}.txt"
     params: 
@@ -172,7 +182,8 @@ rule sourmash_sketch_species_genomes:
     output: 'outputs/sourmash_sketch/{alpha}-k{ksize}_scaled{scaled}/{species}/{acc}.sig' 
     conda: 'envs/sourmash.yml'
     resources:
-        mem_mb = 4000
+        mem_mb = 4000,
+        tmpdir = TMPDIR
     threads: 1
     benchmark: "benchmarks/sourmash_sketch_sig/{alpha}-k{ksize}_scaled{scaled}_{species}_{acc}.txt"
     shell:"""
@@ -186,7 +197,8 @@ rule convert_signature_to_csv:
     threads: 1
     benchmark: "benchmarks/sourmash_sketch_csv/{alpha}-k{ksize}_scaled{scaled}_{species}_{acc}.txt"
     resources:
-        mem_mb=2000
+        mem_mb=2000,
+        tmpdir = TMPDIR
     shell:'''
     python scripts/sig_to_csv.py {input} {output}
     '''
@@ -199,7 +211,8 @@ rule make_hash_table_long:
     threads: 1
     benchmark: "benchmarks/sourmash_sketch_tables_long/{alpha}-k{ksize}_scaled{scaled}_{species}.txt"
     resources:
-        mem_mb=64000
+        mem_mb=64000,
+        tmpdir = TMPDIR
     script: "scripts/sketch_csv_to_long.R"
 
 rule make_hash_table_wide:
@@ -208,7 +221,8 @@ rule make_hash_table_wide:
     threads: 1
     benchmark: "benchmarks/sourmash_sketch_tables_wide/{alpha}-k{ksize}_scaled{scaled}_{species}.txt"
     resources:
-        mem_mb=32000
+        mem_mb=32000,
+        tmpdir = TMPDIR
     run:
         import pandas as pd
         import feather
@@ -230,10 +244,12 @@ rule correlate_pan_units:
         genes_pdf="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_genes.pdf",
         unique="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_unique.tsv",
         unique_pdf="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_unique.pdf",
-        specaccum_pdf = "outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_specaccum.pdf"
+        specaccum_pdf = "outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_specaccum.pdf",
         mantel="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_mantel.tsv",
     threads: 1
-    resources: mem_mb=6000
+    resources: 
+        mem_mb=16000,
+        tmpdir = TMPDIR
     benchmark: "benchmarks/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}_{species}.txt"
     conda: "envs/r_cor_pan.yml"
     script: "scripts/correlate_pan_units.R"
