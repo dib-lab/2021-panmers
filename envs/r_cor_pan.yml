@@ -11,3 +11,4 @@ dependencies:
    - r-broom=0.7.9
    - r-arrow=5.0.0
    - r-vegan=2.5_7
+   - r-ggpubr=0.4.0 

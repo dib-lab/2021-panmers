@@ -64,7 +64,7 @@ class Checkpoint_GatherResults:
 
 rule all:
     input:
-        expand("outputs/correlate_pan_units/{alpha_ksize}_scaled{scaled}/{species}_genes.tsv", alpha_ksize = ALPHA_KSIZE, scaled = SCALED, species = SPECIES)
+        expand("outputs/correlate_pan_units/{alpha_ksize}_scaled{scaled}/{species}_genes.tsv", alpha_ksize = ALPHA_KSIZE, scaled = SCALED, species = SPECIES),
 
 checkpoint grab_species_accessions:
     input: 
@@ -248,7 +248,7 @@ rule correlate_pan_units:
         mantel="outputs/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_mantel.tsv",
     threads: 1
     resources: 
-        mem_mb=16000,
+        mem_mb= lambda wildcards, attempt: attempt * 400000,
         tmpdir = TMPDIR
     benchmark: "benchmarks/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}_{species}.txt"
     conda: "envs/r_cor_pan.yml"
