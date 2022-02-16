@@ -32,9 +32,21 @@ other_pangenomes <- lineages %>%
 
 other_pangenomes_slice <- other_pangenomes %>%
   group_by(phylum) %>%
-  slice(1)
+  dplyr::slice(1)
 
 test_pangenomes <- bind_rows(ibd_pangenomes, other_pangenomes_slice) %>%
+  mutate(species_no_space = gsub(" ", "-", species))
+
+write_tsv(test_pangenomes, "inputs/metadata.tsv")
+
+# add pangenomes that were explored in the metapangenomes section of the paper
+# B. uniformis and E. bolteae are already included; add B. fragilis, P. distasonis, P. merdae, and P. vulgatus
+
+other_pangenomes_metap <- other_pangenomes %>%
+  filter(species %in% c("s__Bacteroides fragilis", "s__Parabacteroides distasonis", 
+                        "s__Parabacteroides merdae", "s__Phocaeicola vulgatus"))
+
+test_pangenomes <- bind_rows(ibd_pangenomes, other_pangenomes_slice, other_pangenomes_metap) %>%
   mutate(species_no_space = gsub(" ", "-", species))
 
 write_tsv(test_pangenomes, "inputs/metadata.tsv")
@@ -46,6 +58,6 @@ test_pangenomes_small <- test_pangenomes %>%
   arrange(n) %>%
   ungroup() %>%
   group_by(superkingdom) %>%
-  slice(1)
+  dplyr::slice(1)
 
 write_tsv(test_pangenomes_small, "inputs/metadata_small.tsv")
