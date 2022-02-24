@@ -2,7 +2,7 @@ import pandas as pd
 import csv
 import re
 
-TMPDIR = "scratch/tereiter/"
+TMPDIR = "/scratch/tereiter/"
 
 metadata = pd.read_csv("inputs/metadata.tsv", sep = "\t", header = 0)
 SPECIES = metadata['species_no_space'].tolist()
@@ -16,13 +16,14 @@ SCALED = [100]
 # Therefore, the chrs in the ALPHA_KSIZE list also set the alphabet names as "dayhoff" and "protein".
 
 # set constrained k sizes
-protein_ksizes = [7, 8, 9, 10, 11]
-dayhoff_ksizes = [13, 15, 17]
-hp_ksizes      = [27, 31]
+protein_ksizes = [10]
+#protein_ksizes = [7, 8, 9, 10, 11]
+#dayhoff_ksizes = [13, 15, 17]
+#hp_ksizes      = [27, 31]
 # combine
 ALPHA_KSIZE  = expand('protein-k{k}', k=protein_ksizes)
-ALPHA_KSIZE += expand('dayhoff-k{k}', k=dayhoff_ksizes)
-ALPHA_KSIZE += expand('hp-k{k}',      k=hp_ksizes)
+#ALPHA_KSIZE += expand('dayhoff-k{k}', k=dayhoff_ksizes)
+#ALPHA_KSIZE += expand('hp-k{k}',      k=hp_ksizes)
 
 
 class Checkpoint_GatherResults:
@@ -65,6 +66,10 @@ class Checkpoint_GatherResults:
 rule all:
     input:
         expand("outputs/correlate_pan_units/{alpha_ksize}_scaled{scaled}/{species}_genes.tsv", alpha_ksize = ALPHA_KSIZE, scaled = SCALED, species = SPECIES),
+        expand("outputs/compare_pan_units/{alpha_ksize}_scaled{scaled}/{species}_containment.csv", alpha_ksize = ALPHA_KSIZE, scaled = SCALED, species = SPECIES),
+        expand("outputs/compare_pan_units/{alpha_ksize}_scaled{scaled}/{species}_similarity.csv", alpha_ksize = ALPHA_KSIZE, scaled = SCALED, species = SPECIES),
+        expand("outputs/compare_pan_units/{alpha_ksize}_scaled{scaled}/{species}_maxcontainment.csv", alpha_ksize = ALPHA_KSIZE, scaled = SCALED, species = SPECIES)
+        #expand('outputs/roary/{species}/pan_genome_reference.fa', species = SPECIES)
 
 checkpoint grab_species_accessions:
     input: 
@@ -81,7 +86,7 @@ checkpoint grab_species_accessions:
 
 rule make_genome_grist_conf_file:
     input: 
-        species=expand("outputs/genbank/{species}.x.genbank.gather.csv", species = SPECIES)
+        species=ancient(expand("outputs/genbank/{species}.x.genbank.gather.csv", species = SPECIES))
     output:
         conf="conf/genome-grist-conf.yml"
     resources:
@@ -119,7 +124,7 @@ rule download_species_assemblies:
     '''
 
 rule ls_download_species_assemblies:
-    input: "genbank_genomes/download_done.txt"
+    input: ancient("genbank_genomes/download_done.txt")
     output: "genbank_genomes/{acc}_genomic.fna.gz"
     resources: 
         mem_mb = 500,
@@ -130,7 +135,7 @@ rule ls_download_species_assemblies:
     '''
 
 rule gunzip_species_genomes:
-    input: "genbank_genomes/{acc}_genomic.fna.gz"
+    input: ancient("genbank_genomes/{acc}_genomic.fna.gz")
     output: "genbank_genomes/{acc}_genomic.fna"
     resources:
         mem_mb = 1000,
@@ -145,7 +150,7 @@ rule prokka_species_genomes:
         ffn = 'outputs/prokka/{species}/{acc}/{acc}.ffn',
         faa = 'outputs/prokka/{species}/{acc}/{acc}.faa',
         gff = 'outputs/prokka/{species}/{acc}/{acc}.gff',
-    input: 'genbank_genomes/{acc}_genomic.fna'
+    input: ancient('genbank_genomes/{acc}_genomic.fna')
     conda: 'envs/prokka.yml'
     resources:
         mem_mb = 8000,
@@ -159,7 +164,7 @@ rule prokka_species_genomes:
     '''
 
 rule roary_species_genomes:
-    input: Checkpoint_GatherResults('outputs/prokka/{{species}}/{acc}/{acc}.gff')
+    input: ancient(Checkpoint_GatherResults('outputs/prokka/{{species}}/{acc}/{acc}.gff'))
     output: 
         'outputs/roary/{species}/pan_genome_reference.fa',
         'outputs/roary/{species}/gene_presence_absence.csv' 
@@ -253,3 +258,132 @@ rule correlate_pan_units:
     benchmark: "benchmarks/correlate_pan_units/{alpha}-k{ksize}_scaled{scaled}_{species}.txt"
     conda: "envs/r_cor_pan.yml"
     script: "scripts/correlate_pan_units.R"
+
+#############################################################
+## compare containment/similarity across core sequences
+#############################################################
+
+rule extract_pangenome_fasta_names:
+    input: 'outputs/roary/{species}/pan_genome_reference.fa',
+    output: 'outputs/roary/{species}/pan_genome_reference_names.txt'
+    threads: 1
+    resources: 
+        mem_mb= lambda wildcards, attempt: attempt * 400000,
+        tmpdir = TMPDIR
+    shell:'''
+    grep ">" {input} > {output}
+    '''
+
+rule install_pagoo:
+    output: pagoo = "outputs/pagoo.txt"
+    conda: 'envs/pagoo.yml'
+    threads: 1
+    resources:
+        mem_mb=1000,
+        tmpdir = TMPDIR
+    script: "scripts/install_pagoo.R"
+
+rule identify_core_gene_sequence_names:
+    input: 
+        pg="outputs/pagoo.txt",
+        pa='outputs/roary/{species}/gene_presence_absence.csv', 
+        names='outputs/roary/{species}/pan_genome_reference_names.txt'
+    output: core_names="outputs/roary/{species}/pan_genome_reference_core_gene_names.txt"
+    threads: 1
+    conda: "envs/pagoo.yml"
+    resources: 
+        mem_mb= lambda wildcards, attempt: attempt * 400000,
+        tmpdir = TMPDIR
+    script: "scripts/identify_core_gene_sequence_names.R"
+
+rule extract_core_gene_sequences_from_pangenome:
+    input:
+        fa="outputs/roary/{species}/pan_genome_reference.fa",
+        core_names="outputs/roary/{species}/pan_genome_reference_core_gene_names.txt"
+    output: "outputs/roary/{species}/pan_genome_reference_core_genes.fa"
+    conda: "envs/seqtk.yml"
+    resources:
+        mem_mb = 2000,
+        tmpdir=TMPDIR
+    threads: 1
+    shell:'''
+    seqtk subseq {input.fa} {input.core_names} > {output}
+    '''
+
+rule translate_core_gene_sequences_from_pangenome:
+    input: "outputs/roary/{species}/pan_genome_reference_core_genes.fa"
+    output: "outputs/roary/{species}/pan_genome_reference_core_genes.faa"
+    conda: 'envs/emboss.yml'
+    resources:
+        mem_mb = 4000,
+        tmpdir = TMPDIR
+    threads: 2
+    shell:'''
+    transeq {input} {output}
+    '''
+
+rule sketch_core_gene_sequences_from_pangenome:
+    input: "outputs/roary/{species}/pan_genome_reference_core_genes.faa"
+    output: "outputs/sourmash_sketch_core_roary/{alpha}-k{ksize}_scaled{scaled}/{species}_pan_genome_reference_core_genes.sig"
+    conda: 'envs/sourmash.yml'
+    resources:
+        mem_mb = 4000,
+        tmpdir = TMPDIR
+    threads: 1
+    shell:"""
+    sourmash sketch protein -p k={wildcards.ksize},scaled={wildcards.scaled},{wildcards.alpha} -o {output} --name {wildcards.species}_core_genes {input}
+    """
+ 
+rule intersect_species_genome_sketches_for_core:
+    input: Checkpoint_GatherResults('outputs/sourmash_sketch/{{alpha}}-k{{ksize}}_scaled{{scaled}}/{{species}}/{acc}.sig') 
+    output: 'outputs/sourmash_sketch_core_kmers/{alpha}-k{ksize}_scaled{scaled}/{species}_core_kmers.sig'
+    conda: 'envs/sourmash.yml'
+    resources:
+        mem_mb = 4000,
+        tmpdir = TMPDIR
+    threads: 1
+    shell:"""
+    sourmash sig intersect -o {output} {input} 
+    """
+
+rule compare_similarity_pangenomes: 
+    input:
+        kmer='outputs/sourmash_sketch_core_kmers/{alpha}-k{ksize}_scaled{scaled}/{species}_core_kmers.sig',
+        gene="outputs/sourmash_sketch_core_roary/{alpha}-k{ksize}_scaled{scaled}/{species}_pan_genome_reference_core_genes.sig",
+    output: "outputs/compare_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_similarity.csv"
+    conda: 'envs/sourmash.yml'
+    resources:
+        mem_mb = 4000,
+        tmpdir = TMPDIR
+    threads: 1
+    shell:"""
+    sourmash compare --csv {output} {input}
+    """
+
+rule compare_containment_pangenomes: 
+    input:
+        kmer='outputs/sourmash_sketch_core_kmers/{alpha}-k{ksize}_scaled{scaled}/{species}_core_kmers.sig',
+        gene="outputs/sourmash_sketch_core_roary/{alpha}-k{ksize}_scaled{scaled}/{species}_pan_genome_reference_core_genes.sig",
+    output: "outputs/compare_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_containment.csv"
+    conda: 'envs/sourmash.yml'
+    resources:
+        mem_mb = 4000,
+        tmpdir = TMPDIR
+    threads: 1
+    shell:"""
+    sourmash compare --containment --csv {output} {input}
+    """
+
+rule compare_maxcontainment_pangenomes: 
+    input:
+        kmer='outputs/sourmash_sketch_core_kmers/{alpha}-k{ksize}_scaled{scaled}/{species}_core_kmers.sig',
+        gene="outputs/sourmash_sketch_core_roary/{alpha}-k{ksize}_scaled{scaled}/{species}_pan_genome_reference_core_genes.sig",
+    output: "outputs/compare_pan_units/{alpha}-k{ksize}_scaled{scaled}/{species}_maxcontainment.csv"
+    conda: 'envs/sourmash.yml'
+    resources:
+        mem_mb = 4000,
+        tmpdir = TMPDIR
+    threads: 1
+    shell:"""
+    sourmash compare --max-containment --csv {output} {input}
+    """
